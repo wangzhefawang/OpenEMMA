@@ -18,6 +18,8 @@ import json
 from openemma.YOLO3D.inference import yolo3d_nuScenes
 from utils import EstimateCurvatureFromTrajectory, IntegrateCurvatureForPoints, OverlayTrajectory, WriteImageSequenceToVideo
 from transformers import MllamaForConditionalGeneration, AutoProcessor, Qwen2VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration, AutoTokenizer
+import os
+from transformers import AutoTokenizer, AutoProcessor, AutoModelForVision2Seq
 from PIL import Image
 from qwen_vl_utils import process_vision_info
 from llava.model.builder import load_pretrained_model
@@ -31,6 +33,19 @@ client = OpenAI(api_key="[your-openai-api-key]")
 OBS_LEN = 10
 FUT_LEN = 10
 TTL_LEN = OBS_LEN + FUT_LEN
+
+def load_vlm(repo_or_path):
+    repo = repo_or_path  # 既可本地目录，也可 HF 仓库名
+    tok = AutoTokenizer.from_pretrained(repo, trust_remote_code=True)
+    try:
+        proc = AutoProcessor.from_pretrained(repo, trust_remote_code=True)
+    except Exception:
+        proc = None
+    model = AutoModelForVision2Seq.from_pretrained(
+        repo, trust_remote_code=True, torch_dtype="auto"
+    )
+    model = model.to("cuda" if torch.cuda.is_available() else "cpu")
+    return model, tok, proc
 
 def getMessage(prompt, image=None, args=None):
     if "llama" in args.model_path or "Llama" in args.model_path:
@@ -204,9 +219,9 @@ def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, gi
         scene_description = SceneDescription(obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
         object_description = DescribeObjects(obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args)
         intent_description = DescribeOrUpdateIntent(obs_images, prev_intent=given_intent, processor=processor, model=model, tokenizer=tokenizer, args=args)
-        print(f'Scene Description: {scene_description}')
-        print(f'Object Description: {object_description}')
-        print(f'Intent Description: {intent_description}')
+        print(f'\n\nScene Description: {scene_description}')
+        print(f'\n\nObject Description: {object_description}')
+        print(f'\n\nIntent Description: {intent_description}')
 
     # Convert array waypoints to string.
     obs_waypoints_str = [f"[{x[0]:.2f},{x[1]:.2f}]" for x in obs_waypoints]
@@ -240,60 +255,29 @@ def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, gi
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-path", type=str, default="gpt")
+    parser.add_argument("--model-path", type=str, default=r"D:\SAVE\files\Models\llava-v1.6-mistral-7b-hf")
     parser.add_argument("--plot", type=bool, default=True)
-    parser.add_argument("--dataroot", type=str, default='datasets/NuScenes')
+    parser.add_argument("--dataroot", type=str, default=r"D:\SAVE\files\Datasets\nuscenes-v1.0-mini")
     parser.add_argument("--version", type=str, default='v1.0-mini')
     parser.add_argument("--method", type=str, default='openemma')
+    parser.add_argument("--scenes",type=str,default="",help="逗号分隔的 scene 列表，如 scene-0103,scene-1077；留空则跑全部")
     args = parser.parse_args()
 
     print(f"{args.model_path}")
 
+    # 通过 --model-path 精确加载视觉语言模型（VLM）
     model = None
     processor = None
     tokenizer = None
-    qwen25_loaded = False
     try:
-        # 优先本地加载Qwen2.5-VL-3B-Instruct，并优选flash attention
-        if "qwen" in args.model_path or "Qwen" in args.model_path:
-            try:
-                model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-                    "/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct",
-                    torch_dtype=torch.bfloat16,
-                    attn_implementation="flash_attention_2",
-                    device_map="auto"
-                )
-                processor = AutoProcessor.from_pretrained("/root/OpenEMMA/models/Qwen2.5-VL-3B-Instruct")
-                tokenizer = None
-                qwen25_loaded = True
-                print("已本地加载 Qwen2.5-VL-3B-Instruct 并启用 flash attention。")
-            except Exception as e:
-                print("Qwen2.5-VL-3B-Instruct 加载失败，尝试加载 Qwen2-VL-7B-Instruct。")
-                print(e)
-                model = Qwen2VLForConditionalGeneration.from_pretrained(
-                    "Qwen/Qwen2-VL-7B-Instruct",
-                    torch_dtype=torch.bfloat16,
-                    device_map="auto"
-                )
-                processor = AutoProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct")
-                tokenizer = None
-                qwen25_loaded = False
-                print("已加载 Qwen2-VL-7B-Instruct。")
-        else:
-            if "llava" == args.model_path:    
-                disable_torch_init()
-                tokenizer, model, processor, context_len = load_pretrained_model("liuhaotian/llava-v1.6-mistral-7b", None, "llava-v1.6-mistral-7b")
-                image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
-            elif "llava" in args.model_path:
-                disable_torch_init()
-                tokenizer, model, processor, context_len = load_pretrained_model(args.model_path, None, "llava-v1.6-mistral-7b")
-                image_token_se = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN
-            else:
-                model = None
-                processor = None
-                tokenizer=None
+        model, tokenizer, processor = load_vlm(args.model_path)
+        assert tokenizer is not None and model is not None, "模型/分词器加载失败，请检查 --model-path"
+        print(f"已从 {args.model_path} 加载模型。")
     except Exception as e:
         print("模型加载出现异常：", e)
+        model = None
+        processor = None
+        tokenizer = None
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     timestamp = args.model_path + f"_results/{args.method}/" + timestamp
@@ -314,7 +298,8 @@ if __name__ == '__main__':
         name = scene['name']
         description = scene['description']
 
-        if not name in ["scene-0103", "scene-1077"]:
+        allow = set(s.strip() for s in args.scenes.split(",") if s.strip())
+        if allow and name not in allow:
             continue
 
         # Get all image and pose in this scene
