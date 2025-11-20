@@ -181,7 +181,7 @@ def ProjectWorldToImage(points3d_world: list, cam_to_ego, ego_to_world):
     return points3d_img
 
 
-def OffsetTrajectory3D(points, offset_distance):
+def OffsetTrajectory3D(points, offset_distance, eps=1e-6):
     """
     Offsets a 3D trajectory by a specified distance normal to the trajectory.
 
@@ -192,20 +192,61 @@ def OffsetTrajectory3D(points, offset_distance):
     Returns:
         np.ndarray: Offset trajectory as an n x 3 array.
     """
-    # Compute differences to find tangent vectors
-    tangents = np.gradient(points, axis=0)  # Approximate tangents
-    tangents /= np.linalg.norm(tangents, axis=1, keepdims=True)  # Normalize tangents
+    points = np.asarray(points, dtype=float)
+    n = len(points)
+    if n < 2:
+        # 太短的轨迹，没法算切线，直接原样返回
+        return points.copy()
 
-    # Reference vector for normal plane computation (e.g., z-axis)
-    reference_vector = np.array([0, 0, 1])
+    # 1. 用差分近似切向量（比 gradient 稍微稳定一点）
+    tangents = np.zeros_like(points)
+    tangents[1:-1] = points[2:] - points[:-2]
+    tangents[0] = points[1] - points[0]
+    tangents[-1] = points[-1] - points[-2]
 
-    # Compute normal vectors via cross product
-    normals = np.cross(tangents, reference_vector)
-    normals /= np.linalg.norm(normals, axis=1, keepdims=True)  # Normalize normals
+    # 2. 归一化前先算范数
+    norms = np.linalg.norm(tangents, axis=1, keepdims=True)
+    zero_mask = norms < eps  # 认为这是“静止/几乎没动”的点
 
-    # Compute offset points
+    # 2.1 对于范数太小的点，尽量用前后非零切向来补
+    for i in range(n):
+        if zero_mask[i]:
+            if i > 0 and not zero_mask[i - 1]:
+                tangents[i] = tangents[i - 1]
+            elif i < n - 1 and not zero_mask[i + 1]:
+                tangents[i] = tangents[i + 1]
+
+    # 2.2 再算一遍范数
+    norms = np.linalg.norm(tangents, axis=1, keepdims=True)
+    zero_mask = norms < eps
+
+    # 如果还是 0，就给一个默认方向，比如沿 x 轴
+    tangents[zero_mask.squeeze(-1)] = np.array([1.0, 0.0, 0.0])
+    norms[zero_mask] = 1.0
+
+    # 2.3 真正归一化
+    tangents = tangents / norms
+
+    # 3. 计算法向量：先用 z 轴作为参考
+    ref_z = np.array([0.0, 0.0, 1.0])
+    normals = np.cross(tangents, ref_z)
+    normal_norms = np.linalg.norm(normals, axis=1, keepdims=True)
+
+    # 3.1 如果切向刚好平行 z 轴，法向会变成 0，换一个参考向量再来一次
+    parallel_mask = normal_norms < eps
+    if np.any(parallel_mask):
+        ref_y = np.array([0.0, 1.0, 0.0])
+        normals[parallel_mask.squeeze(-1)] = np.cross(
+            tangents[parallel_mask.squeeze(-1)], ref_y
+        )
+        normal_norms = np.linalg.norm(normals, axis=1, keepdims=True)
+
+    # 3.2 再次防止 0，给默认值
+    normal_norms[normal_norms < eps] = 1.0
+    normals = normals / normal_norms
+
+    # 4. 计算偏移轨迹
     offset_points = points + offset_distance * normals
-
     return offset_points
 
 def OverlayTrajectory(img, points3d_world: list, cam_to_ego, ego_to_world, color=(0, 0, 255), args=None):
