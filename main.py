@@ -255,12 +255,12 @@ def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, gi
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-path", type=str, default=r"D:\SAVE\files\Models\llava-v1.6-mistral-7b-hf")
+    parser.add_argument("--model-path", type=str, default=r"D:\SAVE\files\Models\Qwen2.5-VL-7B-Instruct")
     parser.add_argument("--plot", type=bool, default=True)
     parser.add_argument("--dataroot", type=str, default=r"D:\SAVE\files\Datasets\nuscenes-v1.0-mini")
     parser.add_argument("--version", type=str, default='v1.0-mini')
     parser.add_argument("--method", type=str, default='openemma')
-    parser.add_argument("--scenes",type=str,default="",help="逗号分隔的 scene 列表，如 scene-0103,scene-1077；留空则跑全部")
+    parser.add_argument("--scenes",type=str,default="",help="逗号分隔的 scene 列表，如 scene-0103,scene-1077; 留空则跑全部")
     args = parser.parse_args()
 
     print(f"{args.model_path}")
@@ -289,6 +289,29 @@ if __name__ == '__main__':
     # Iterate the scenes
     scenes = nusc.scene
     
+    allowed_scene_identifiers = set()
+    if args.scenes:
+        normalized_scene_arg = args.scenes.replace(",", ",").replace(";", ",")
+        for item in re.split(r"[,\s]+", normalized_scene_arg):
+            item = item.strip()
+            if item:
+                allowed_scene_identifiers.add(item)
+        if allowed_scene_identifiers:
+            matched_scene_names = []
+            matched_identifiers = set()
+            for scene in scenes:
+                if scene['name'] in allowed_scene_identifiers or scene['token'] in allowed_scene_identifiers:
+                    matched_scene_names.append(scene['name'])
+                    matched_identifiers.add(scene['name'])
+                    matched_identifiers.add(scene['token'])
+            missing_identifiers = allowed_scene_identifiers - matched_identifiers
+            if matched_scene_names:
+                print(f"按 --scenes 过滤后将处理 {len(matched_scene_names)} 个 scene：{', '.join(matched_scene_names)}")
+            else:
+                print(f"警告：--scenes 参数未匹配到任何 scene，将默认处理全部 {len(scenes)} 个 scene。")
+            if missing_identifiers:
+                print(f"警告：未找到以下 scene 标识：{', '.join(sorted(missing_identifiers))}")
+    
     print(f"Number of scenes: {len(scenes)}")
 
     for scene in scenes:
@@ -298,8 +321,7 @@ if __name__ == '__main__':
         name = scene['name']
         description = scene['description']
 
-        allow = set(s.strip() for s in args.scenes.split(",") if s.strip())
-        if allow and name not in allow:
+        if allowed_scene_identifiers and name not in allowed_scene_identifiers and token not in allowed_scene_identifiers:
             continue
 
         # Get all image and pose in this scene
