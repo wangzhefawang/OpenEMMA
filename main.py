@@ -2,6 +2,7 @@ import base64
 import os.path
 import re
 import argparse
+import sys
 from datetime import datetime
 from math import atan2
 
@@ -54,8 +55,8 @@ def load_vlm(repo_or_path, quantization: str = "none"):
     if "llava" in repo_lower:
         disable_torch_init()
         model_name = get_model_name_from_path(repo_or_path)
-        tokenizer, model, image_processor, _ = load_pretrained_model(
-            repo_or_path,
+        load_kwargs = dict(
+            model_path=repo_or_path,
             model_base=None,
             model_name=model_name,
             device=device,
@@ -63,6 +64,16 @@ def load_vlm(repo_or_path, quantization: str = "none"):
             load_4bit=quantization == "4bit",
             load_8bit=quantization == "8bit",
         )
+        try:
+            tokenizer, model, image_processor, _ = load_pretrained_model(**load_kwargs)
+        except Exception as err:
+            if quantization != "none":
+                print(f"量化加载失败（{err}），回退到全精度……")
+                load_kwargs["load_4bit"] = False
+                load_kwargs["load_8bit"] = False
+                tokenizer, model, image_processor, _ = load_pretrained_model(**load_kwargs)
+            else:
+                raise
         if device != "cuda":
             model = model.to(device)
         return model, tokenizer, image_processor
@@ -88,18 +99,25 @@ def load_vlm(repo_or_path, quantization: str = "none"):
                 )
             elif quantization == "8bit":
                 quant_config = BitsAndBytesConfig(load_in_8bit=True)
-    if quant_config is not None:
-        model = AutoModelForVision2Seq.from_pretrained(
-            repo,
-            trust_remote_code=True,
-            quantization_config=quant_config,
-            device_map="auto",
-        )
-    else:
-        model = AutoModelForVision2Seq.from_pretrained(
+    def _load_default_precision():
+        mdl = AutoModelForVision2Seq.from_pretrained(
             repo, trust_remote_code=True, torch_dtype="auto"
         )
-        model = model.to(device)
+        return mdl.to(device)
+
+    if quant_config is not None:
+        try:
+            model = AutoModelForVision2Seq.from_pretrained(
+                repo,
+                trust_remote_code=True,
+                quantization_config=quant_config,
+                device_map="auto",
+            )
+        except Exception as err:
+            print(f"量化加载失败（{err}），回退到全精度……")
+            model = _load_default_precision()
+    else:
+        model = _load_default_precision()
     return model, tok, proc
 
 def getMessage(prompt, image=None, args=None):
@@ -333,6 +351,10 @@ if __name__ == '__main__':
         model = None
         processor = None
         tokenizer = None
+
+    if model is None or tokenizer is None:
+        print("致命错误：视觉语言模型未加载成功，程序终止。")
+        sys.exit(1)
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     timestamp = args.model_path + f"_results/{args.method}/" + timestamp
