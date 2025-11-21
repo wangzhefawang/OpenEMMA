@@ -17,7 +17,14 @@ from scipy.integrate import cumulative_trapezoid
 import json
 from openemma.YOLO3D.inference import yolo3d_nuScenes
 from utils import EstimateCurvatureFromTrajectory, IntegrateCurvatureForPoints, OverlayTrajectory, WriteImageSequenceToVideo
-from transformers import MllamaForConditionalGeneration, AutoProcessor, Qwen2VLForConditionalGeneration, Qwen2_5_VLForConditionalGeneration, AutoTokenizer
+from transformers import (
+    MllamaForConditionalGeneration,
+    AutoProcessor,
+    Qwen2VLForConditionalGeneration,
+    Qwen2_5_VLForConditionalGeneration,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+)
 import os
 from transformers import AutoTokenizer, AutoProcessor, AutoModelForVision2Seq
 from PIL import Image
@@ -34,7 +41,7 @@ OBS_LEN = 10
 FUT_LEN = 10
 TTL_LEN = OBS_LEN + FUT_LEN
 
-def load_vlm(repo_or_path):
+def load_vlm(repo_or_path, quantization: str = "none"):
     """
     根据 --model-path 加载对应的视觉语言模型。
     - 对于 LLaVA 系列，走其自带的加载逻辑（需要 tokenizer / image_processor）。
@@ -42,6 +49,7 @@ def load_vlm(repo_or_path):
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     repo_lower = repo_or_path.lower()
+    quantization = (quantization or "none").lower()
 
     if "llava" in repo_lower:
         disable_torch_init()
@@ -52,6 +60,8 @@ def load_vlm(repo_or_path):
             model_name=model_name,
             device=device,
             device_map="auto" if device == "cuda" else {"": device},
+            load_4bit=quantization == "4bit",
+            load_8bit=quantization == "8bit",
         )
         if device != "cuda":
             model = model.to(device)
@@ -63,10 +73,33 @@ def load_vlm(repo_or_path):
         proc = AutoProcessor.from_pretrained(repo, trust_remote_code=True)
     except Exception:
         proc = None
-    model = AutoModelForVision2Seq.from_pretrained(
-        repo, trust_remote_code=True, torch_dtype="auto"
-    )
-    model = model.to(device)
+    quant_config = None
+    if quantization in {"4bit", "8bit"}:
+        if not torch.cuda.is_available():
+            print("警告：当前设备不支持量化加载，改为默认精度。")
+            quantization = "none"
+        else:
+            if quantization == "4bit":
+                quant_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_use_double_quant=True,
+                    bnb_4bit_quant_type="nf4",
+                )
+            elif quantization == "8bit":
+                quant_config = BitsAndBytesConfig(load_in_8bit=True)
+    if quant_config is not None:
+        model = AutoModelForVision2Seq.from_pretrained(
+            repo,
+            trust_remote_code=True,
+            quantization_config=quant_config,
+            device_map="auto",
+        )
+    else:
+        model = AutoModelForVision2Seq.from_pretrained(
+            repo, trust_remote_code=True, torch_dtype="auto"
+        )
+        model = model.to(device)
     return model, tok, proc
 
 def getMessage(prompt, image=None, args=None):
@@ -249,7 +282,7 @@ def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, gi
     obs_waypoints_str = [f"[{x[0]:.2f},{x[1]:.2f}]" for x in obs_waypoints]
     obs_waypoints_str = ", ".join(obs_waypoints_str)
     obs_velocities_norm = np.linalg.norm(obs_velocities, axis=1)
-    obs_speed_curvature_str = [f"[{x[0]:.1f},{x[1]:.1f}]" for x in zip(obs_velocities_norm, obs_curvatures)]
+    obs_speed_curvature_str = [f"[{v:.3f},{k:.3f}]" for v, k in zip(obs_velocities_norm, obs_curvatures)]
     obs_speed_curvature_str = ", ".join(obs_speed_curvature_str)
 
     
@@ -281,6 +314,7 @@ if __name__ == '__main__':
     parser.add_argument("--dataroot", type=str, default=r"D:\SAVE\files\Datasets\nuscenes-v1.0-mini")
     parser.add_argument("--version", type=str, default='v1.0-mini')
     parser.add_argument("--method", type=str, default='openemma')
+    parser.add_argument("--quantization", type=str, default="none", choices=["none", "4bit", "8bit"],help="选择 VLM 加载精度：none/4bit/8bit")
     parser.add_argument("--scenes",type=str,default="",help="逗号分隔的 scene 列表，如 scene-0103,scene-1077; 留空则跑全部")
     args = parser.parse_args()
 
@@ -291,7 +325,7 @@ if __name__ == '__main__':
     processor = None
     tokenizer = None
     try:
-        model, tokenizer, processor = load_vlm(args.model_path)
+        model, tokenizer, processor = load_vlm(args.model_path, quantization=args.quantization)
         assert tokenizer is not None and model is not None, "模型/分词器加载失败，请检查 --model-path"
         print(f"已从 {args.model_path} 加载模型。")
     except Exception as e:
