@@ -284,8 +284,18 @@ def OverlayTrajectory(img, points3d_world: list, cam_to_ego, ego_to_world, color
 
 
 
-def EstimateCurvatureFromTrajectory(traj):
-    traj = traj[:, :2]
+def EstimateCurvatureFromTrajectory(
+    traj, min_segment_length: float = 0.05, max_abs_curvature: float = 0.5
+):
+    """
+    根据离散轨迹估计曲率，并对静止/缓慢移动时的数值进行稳定化处理。
+
+    Args:
+        traj (np.ndarray): 形状 (N, 3) 或 (N, 2) 的轨迹点。
+        min_segment_length (float): 判定“有效位移”的阈值（单位：米）。
+        max_abs_curvature (float): 物理可接受的最大曲率，用于裁剪噪声。
+    """
+    traj = np.asarray(traj)[:, :2]
     curvature = np.zeros(len(traj))
 
     for i in range(1, len(traj) - 1):
@@ -302,11 +312,24 @@ def EstimateCurvatureFromTrajectory(traj):
         L2 = np.linalg.norm(v2)
         L3 = np.linalg.norm(np.array([x3 - x1, y3 - y1]))
 
-        # Signed area (using cross product)
-        area_signed = 0.5 * ((x2 - x1)*(y3 - y1) - (y2 - y1)*(x3 - x1))
+        # 当车辆几乎静止或噪声导致位移极小时，直接认为曲率为 0
+        if (
+            L1 < min_segment_length
+            or L2 < min_segment_length
+            or L3 < min_segment_length * 2
+        ):
+            curvature[i] = 0.0
+            continue
 
-        if L1 > 0 and L2 > 0 and L3 > 0:
-            curvature[i] = 4 * area_signed / (L1 * L2 * L3)
+        denom = L1 * L2 * L3
+        if denom < 1e-3:
+            curvature[i] = 0.0
+            continue
+
+        # Signed area (using cross product)
+        area_signed = 0.5 * ((x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1))
+        raw_curvature = 4 * area_signed / denom
+        curvature[i] = np.clip(raw_curvature, -max_abs_curvature, max_abs_curvature)
 
     curvature[0] = curvature[1]
     curvature[-1] = curvature[-2]

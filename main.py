@@ -35,6 +35,28 @@ FUT_LEN = 10
 TTL_LEN = OBS_LEN + FUT_LEN
 
 def load_vlm(repo_or_path):
+    """
+    根据 --model-path 加载对应的视觉语言模型。
+    - 对于 LLaVA 系列，走其自带的加载逻辑（需要 tokenizer / image_processor）。
+    - 其他 Hugging Face Vision-LLM 走 AutoModelForVision2Seq + AutoProcessor。
+    """
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    repo_lower = repo_or_path.lower()
+
+    if "llava" in repo_lower:
+        disable_torch_init()
+        model_name = get_model_name_from_path(repo_or_path)
+        tokenizer, model, image_processor, _ = load_pretrained_model(
+            repo_or_path,
+            model_base=None,
+            model_name=model_name,
+            device=device,
+            device_map="auto" if device == "cuda" else {"": device},
+        )
+        if device != "cuda":
+            model = model.to(device)
+        return model, tokenizer, image_processor
+
     repo = repo_or_path  # 既可本地目录，也可 HF 仓库名
     tok = AutoTokenizer.from_pretrained(repo, trust_remote_code=True)
     try:
@@ -44,7 +66,7 @@ def load_vlm(repo_or_path):
     model = AutoModelForVision2Seq.from_pretrained(
         repo, trust_remote_code=True, torch_dtype="auto"
     )
-    model = model.to("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
     return model, tok, proc
 
 def getMessage(prompt, image=None, args=None):
@@ -227,7 +249,6 @@ def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, gi
     obs_waypoints_str = [f"[{x[0]:.2f},{x[1]:.2f}]" for x in obs_waypoints]
     obs_waypoints_str = ", ".join(obs_waypoints_str)
     obs_velocities_norm = np.linalg.norm(obs_velocities, axis=1)
-    obs_curvatures = obs_curvatures * 100
     obs_speed_curvature_str = [f"[{x[0]:.1f},{x[1]:.1f}]" for x in zip(obs_velocities_norm, obs_curvatures)]
     obs_speed_curvature_str = ", ".join(obs_speed_curvature_str)
 
@@ -255,7 +276,7 @@ def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, gi
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-path", type=str, default=r"D:\SAVE\files\Models\Qwen2.5-VL-7B-Instruct")
+    parser.add_argument("--model-path", type=str, default=r"D:\SAVE\files\Models\llava-v1.6-mistral-7b")
     parser.add_argument("--plot", type=bool, default=True)
     parser.add_argument("--dataroot", type=str, default=r"D:\SAVE\files\Datasets\nuscenes-v1.0-mini")
     parser.add_argument("--version", type=str, default='v1.0-mini')
