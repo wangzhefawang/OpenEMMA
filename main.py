@@ -138,10 +138,41 @@ def getMessage(prompt, image=None, args=None):
     return message
 
 
+def prepare_image_payload(image_source, args=None, processor=None, model=None):
+    """
+    为多次调用的 VLM 推理准备图像缓存，避免重复磁盘 IO 和张量预处理。
+    仅在 LLaVA/LLaMA 路线下创建 payload，其它模型保持原样返回。
+    """
+    if args is None:
+        return image_source
+    model_lower = args.model_path.lower()
+    if not any(key in model_lower for key in ("llava", "llama")):
+        return image_source
+
+    if isinstance(image_source, dict) and "pil" in image_source:
+        return image_source
+
+    if isinstance(image_source, Image.Image):
+        pil_image = image_source
+    else:
+        pil_image = Image.open(image_source).convert('RGB')
+    payload = {"pil": pil_image}
+
+    if "llava" in model_lower and processor is not None and model is not None:
+        # 只在 CPU 上缓存一次 processed tensor，使用时再拷贝到 GPU
+        with torch.inference_mode():
+            payload["llava_tensor"] = process_images([pil_image], processor, model.config)[0].cpu()
+
+    return payload
+
+
 def vlm_inference(text=None, images=None, sys_message=None, processor=None, model=None, tokenizer=None, args=None):
     with torch.inference_mode():
         if "llama" in args.model_path or "Llama" in args.model_path:
-            image = Image.open(images).convert('RGB')
+            if isinstance(images, dict) and "pil" in images:
+                image = images["pil"]
+            else:
+                image = Image.open(images).convert('RGB')
             message = getMessage(text, args=args)
             input_text = processor.apply_chat_template(message, add_generation_prompt=True)
             inputs = processor(
@@ -200,14 +231,24 @@ def vlm_inference(text=None, images=None, sys_message=None, processor=None, mode
             conv.append_message(conv.roles[1], None)
             prompt = conv.get_prompt()
 
-            input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt').unsqueeze(0).cuda()
-            image = Image.open(images).convert('RGB')
+            input_ids = tokenizer_image_token(
+                prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt'
+            ).unsqueeze(0).to(model.device)
+            if isinstance(images, dict) and "pil" in images:
+                image = images["pil"]
+                image_tensor = images.get("llava_tensor")
+            else:
+                image = Image.open(images).convert('RGB')
+                image_tensor = None
 
-            image_tensor = process_images([image], processor, model.config)[0]
+            if image_tensor is None:
+                image_tensor = process_images([image], processor, model.config)[0].cpu()
+
+            image_tensor = image_tensor.unsqueeze(0).to(model.device, dtype=torch.float16)
 
             output_ids = model.generate(
                 input_ids,
-                images=image_tensor.unsqueeze(0).half().cuda(),
+                images=image_tensor,
                 image_sizes=[image.size],
                 do_sample=True,
                 temperature=0.2,
@@ -500,10 +541,18 @@ if __name__ == '__main__':
                 with open(os.path.join(curr_image), "rb") as image_file:
                     img = cv2.imdecode(np.frombuffer(image_file.read(), dtype=np.uint8), cv2.IMREAD_COLOR)
 
+            if "gpt" in args.model_path:
+                obs_images_arg = front_camera_images[i:i+OBS_LEN]
+            else:
+                model_lower = args.model_path.lower()
+                if any(key in model_lower for key in ("llava", "llama")):
+                    obs_images_arg = prepare_image_payload(curr_image, args=args, processor=processor, model=model)
+                else:
+                    obs_images_arg = curr_image
+
             for rho in range(3):
                 # Assemble the prompt.
-                if not "gpt" in args.model_path:
-                    obs_images = curr_image
+                obs_images = obs_images_arg
                 (prediction,
                 scene_description,
                 object_description,
