@@ -139,6 +139,7 @@ def getMessage(prompt, image=None, args=None):
 
 
 def vlm_inference(text=None, images=None, sys_message=None, processor=None, model=None, tokenizer=None, args=None):
+    with torch.inference_mode():
         if "llama" in args.model_path or "Llama" in args.model_path:
             image = Image.open(images).convert('RGB')
             message = getMessage(text, args=args)
@@ -204,19 +205,18 @@ def vlm_inference(text=None, images=None, sys_message=None, processor=None, mode
 
             image_tensor = process_images([image], processor, model.config)[0]
 
-            with torch.inference_mode():
-                output_ids = model.generate(
-                    input_ids,
-                    images=image_tensor.unsqueeze(0).half().cuda(),
-                    image_sizes=[image.size],
-                    do_sample=True,
-                    temperature=0.2,
-                    top_p=None,
-                    num_beams=1,
-                    max_new_tokens=2048,
-                    use_cache=True,
-                    pad_token_id = tokenizer.eos_token_id,
-                )
+            output_ids = model.generate(
+                input_ids,
+                images=image_tensor.unsqueeze(0).half().cuda(),
+                image_sizes=[image.size],
+                do_sample=True,
+                temperature=0.2,
+                top_p=None,
+                num_beams=1,
+                max_new_tokens=2048,
+                use_cache=True,
+                pad_token_id = tokenizer.eos_token_id,
+            )
 
             outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
             return outputs
@@ -323,6 +323,8 @@ def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, gi
         result = vlm_inference(text=prompt, images=obs_images, sys_message=sys_message, processor=processor, model=model, tokenizer=tokenizer, args=args)
         if not "unable" in result and not "sorry" in result and "[" in result:
             break
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
     return result, scene_description, object_description, intent_description
 
 if __name__ == '__main__':
