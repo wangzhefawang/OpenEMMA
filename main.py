@@ -370,7 +370,7 @@ def GenerateMotion(obs_images, obs_waypoints, obs_velocities, obs_curvatures, gi
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model-path", type=str, default=r"D:\SAVE\files\Models\llava-v1.6-mistral-7b")
+    parser.add_argument("--model-path", type=str, default=r"D:\SAVE\files\Models\Qwen2.5-VL-7B-Instruct")
     parser.add_argument("--plot", type=bool, default=True)
     parser.add_argument("--dataroot", type=str, default=r"D:\SAVE\files\Datasets\nuscenes-v1.0-mini")
     parser.add_argument("--version", type=str, default='v1.0-mini')
@@ -476,7 +476,7 @@ if __name__ == '__main__':
             curr_sample_token = sample['next']
 
         scene_length = len(front_camera_images)
-        print(f"Scene {name} has {scene_length} frames")
+        print(f"\n\nScene {name} has {scene_length} frames")
 
         if scene_length < TTL_LEN:
             print(f"Scene {name} has less than {TTL_LEN} frames, skipping...")
