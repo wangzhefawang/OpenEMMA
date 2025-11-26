@@ -184,6 +184,11 @@ def vlm_inference(
             output = model.generate(**inputs, max_new_tokens=2048)
 
             output_text = processor.decode(output[0])
+            
+            # 立即释放显存
+            del inputs, output
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 
             if "llama" in args.model_path or "Llama" in args.model_path:
                 # 尝试提取 assistant 的回复（支持多种格式）
@@ -267,6 +272,10 @@ def vlm_inference(
                 output_text = processor.batch_decode(
                     generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
                 )
+                # 释放显存
+                del inputs, generated_ids, generated_ids_trimmed, image_inputs, video_inputs
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 return output_text[0]
 
         elif "llava" in args.model_path:
@@ -321,6 +330,12 @@ def vlm_inference(
             )
 
             outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+            
+            # 释放显存
+            del input_ids, image_tensor, output_ids
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
             return outputs
 
         elif "gpt" in args.model_path:

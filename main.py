@@ -210,6 +210,10 @@ def main():
                     args=args,
                 )
                 monitor.record_gpu_usage()
+                
+                # 定期清理显存
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
 
                 # 解析输出
                 prev_intent = updated_intent
