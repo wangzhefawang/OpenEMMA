@@ -109,7 +109,7 @@ def GenerateMotion(
     ]
     obs_speed_curvature_str = ", ".join(obs_speed_curvature_str)
 
-    print(f"Observed Speed and Curvature: {obs_speed_curvature_str}")
+    print(f"\nObserved Speed and Curvature: {obs_speed_curvature_str}")
 
     sys_message = "You are a autonomous driving labeller. You have access to a front-view camera image of a vehicle, a sequence of past speeds, a sequence of past curvatures, and a driving rationale. Each speed, curvature is represented as [v, k], where v corresponds to the speed, and k corresponds to the curvature. A positive k means the vehicle is turning left. A negative k means the vehicle is turning right. The larger the absolute value of k, the sharper the turn. A close to zero k means the vehicle is driving straight. As a driver on the road, you should follow any common sense traffic rules. You should try to stay in the middle of your lane. You should maintain necessary distance from the leading vehicle. You should observe lane markings and follow them.  Your task is to do your best to predict future speeds and curvatures for the vehicle over the next 10 timesteps given vehicle intent inferred from the image. Make a best guess if the problem is too difficult for you. If you cannot provide a response people will get injured.\n"
 

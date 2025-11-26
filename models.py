@@ -186,18 +186,19 @@ def vlm_inference(
             output_text = processor.decode(output[0])
 
             if "llama" in args.model_path or "Llama" in args.model_path:
-                # 尝试提取 assistant 的回复
+                # 尝试提取 assistant 的回复（支持多种格式）
+                # 格式1: assistant 回复后有 <|eot_id|>
                 matches = re.findall(
-                    r"<\|start_header_id\|>assistant<\|end_header_id\|>(.*?)<\|eot_id\|>",
+                    r"<\|start_header_id\|>assistant<\|end_header_id\|>\s*(.*?)(?:<\|eot_id\|>|$)",
                     output_text,
                     re.DOTALL,
                 )
                 if matches:
-                    output_text = matches[0].strip()
+                    # 取最后一个 assistant 的回复（可能有多轮对话）
+                    output_text = matches[-1].strip()
                 else:
                     # 如果正则匹配失败，尝试其他格式或直接返回
-                    print(f"[WARNING] 无法解析 Llama 输出格式，原始输出：")
-                    print(f"{output_text[:500]}...")  # 只打印前500字符
+                    print(f"[WARNING] 无法解析 Llama 输出格式，使用备用方案")
                     
                     # 尝试简单清理：移除特殊 token
                     output_text = output_text.replace("<|begin_of_text|>", "")
