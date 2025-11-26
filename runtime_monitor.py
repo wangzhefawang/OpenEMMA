@@ -11,10 +11,11 @@ except ImportError:  # pragma: no cover - torch is required at runtime
 class RuntimeMonitor:
     """Collect runtime duration and GPU memory usage for the current process."""
 
-    def __init__(self) -> None:
+    def __init__(self, run_args: Optional[Dict] = None) -> None:
         self._start_ts: Optional[float] = None
         self._end_ts: Optional[float] = None
         self._gpu_samples_mb: list[float] = []
+        self._run_args: Optional[Dict] = run_args  # 保存运行参数
 
     def start(self) -> None:
         if self._start_ts is None:
@@ -38,10 +39,15 @@ class RuntimeMonitor:
             if self._gpu_samples_mb
             else None
         )
-        return {
+        result = {
             "total_runtime_sec": total_runtime,
             "avg_gpu_memory_mb": avg_gpu,
+            "gpu_samples_count": len(self._gpu_samples_mb),
         }
+        # 如果有运行参数，也包含进去
+        if self._run_args is not None:
+            result["run_args"] = self._run_args
+        return result
 
     def dump(self, file_path: str) -> None:
         summary = self.finish()

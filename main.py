@@ -35,8 +35,8 @@ def main():
     parser = build_arg_parser()
     args = parser.parse_args()
 
-    # 初始化运行时监控
-    monitor = RuntimeMonitor()
+    # 初始化运行时监控（传入参数）
+    monitor = RuntimeMonitor(run_args=vars(args))
     monitor.start()
 
     print(f"{args.model_path}")
@@ -68,6 +68,13 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     timestamp = args.model_path + f"_results/{args.method}/" + timestamp
     os.makedirs(timestamp, exist_ok=True)
+    
+    # 保存命令行参数
+    import json
+    args_dict = vars(args)
+    with open(os.path.join(timestamp, "run_config.json"), "w", encoding="utf-8") as f:
+        json.dump(args_dict, f, ensure_ascii=False, indent=2)
+    print(f"运行配置已保存到: {os.path.join(timestamp, 'run_config.json')}")
 
     # 加载数据集
     nusc = load_nuscenes_dataset(args.version, args.dataroot)
