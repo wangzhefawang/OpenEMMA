@@ -18,6 +18,7 @@ from scipy.integrate import cumulative_trapezoid
 import json
 from openemma.YOLO3D.inference import yolo3d_nuScenes
 from utils import EstimateCurvatureFromTrajectory, IntegrateCurvatureForPoints, OverlayTrajectory, WriteImageSequenceToVideo
+from runtime_monitor import RuntimeMonitor
 from transformers import (
     MllamaForConditionalGeneration,
     AutoProcessor,
@@ -375,9 +376,12 @@ if __name__ == '__main__':
     parser.add_argument("--dataroot", type=str, default=r"D:\SAVE\files\Datasets\nuscenes-v1.0-mini")
     parser.add_argument("--version", type=str, default='v1.0-mini')
     parser.add_argument("--method", type=str, default='openemma')
-    parser.add_argument("--quantization", type=str, default="none", choices=["none", "4bit", "8bit"],help="选择 VLM 加载精度：none/4bit/8bit")
+    parser.add_argument("--quantization", type=str, default="8bit", choices=["none", "4bit", "8bit"],help="选择 VLM 加载精度：none/4bit/8bit")
     parser.add_argument("--scenes",type=str,default="",help="逗号分隔的 scene 列表，如 scene-0103,scene-1077; 留空则跑全部")
     args = parser.parse_args()
+
+    monitor = RuntimeMonitor()
+    monitor.start()
 
     print(f"{args.model_path}")
 
@@ -389,6 +393,7 @@ if __name__ == '__main__':
         model, tokenizer, processor = load_vlm(args.model_path, quantization=args.quantization)
         assert tokenizer is not None and model is not None, "模型/分词器加载失败，请检查 --model-path"
         print(f"已从 {args.model_path} 加载模型。")
+        monitor.record_gpu_usage()
     except Exception as e:
         print("模型加载出现异常：", e)
         model = None
@@ -558,6 +563,7 @@ if __name__ == '__main__':
                 object_description,
                 updated_intent) = GenerateMotion(obs_images, obs_ego_traj_world, obs_ego_velocities,
                                                 obs_ego_curvatures, prev_intent, processor=processor, model=model, tokenizer=tokenizer, args=args)
+                monitor.record_gpu_usage()
 
                 # Process the output.
                 prev_intent = updated_intent  # Stateful intent
@@ -654,6 +660,18 @@ if __name__ == '__main__':
             WriteImageSequenceToVideo(cam_images_sequence, f"{timestamp}/{name}")
 
         # break  # Scenes
+
+    metrics = monitor.finish()
+    metrics_path = os.path.join(timestamp, "runtime_metrics.json")
+    monitor.dump(metrics_path)
+    if metrics["total_runtime_sec"] is not None:
+        print(f"总运行时长: {metrics['total_runtime_sec']:.2f} 秒")
+    else:
+        print("未能计算运行时长。")
+    if metrics["avg_gpu_memory_mb"] is not None:
+        print(f"GPU显存平均使用: {metrics['avg_gpu_memory_mb']:.2f} MB")
+    else:
+        print("GPU 不可用，未统计显存平均值。")
 
 
 def vlm_inference(text=None, images=None, sys_message=None, processor=None, model=None, tokenizer=None, args=None):
