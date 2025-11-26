@@ -6,15 +6,7 @@
 """
 import time
 import torch
-
-
-def format_bytes(bytes_val):
-    """格式化字节数"""
-    for unit in ['B', 'KB', 'MB', 'GB']:
-        if bytes_val < 1024.0:
-            return f"{bytes_val:.2f} {unit}"
-        bytes_val /= 1024.0
-    return f"{bytes_val:.2f} TB"
+from format_utils import format_bytes, format_percentage
 
 
 def monitor_gpu(interval=2.0):
@@ -36,11 +28,10 @@ def monitor_gpu(interval=2.0):
                 total = props.total_memory
                 
                 allocated_pct = (allocated / total) * 100
-                reserved_pct = (reserved / total) * 100
                 
                 print(f"\nGPU {i}: {props.name}")
-                print(f"  已分配: {format_bytes(allocated)} / {format_bytes(total)} ({allocated_pct:.1f}%)")
-                print(f"  已保留: {format_bytes(reserved)} / {format_bytes(total)} ({reserved_pct:.1f}%)")
+                print(f"  已分配: {format_bytes(allocated)} / {format_bytes(total)} ({format_percentage(allocated, total)})")
+                print(f"  已保留: {format_bytes(reserved)} / {format_bytes(total)} ({format_percentage(reserved, total)})")
                 print(f"  可用:   {format_bytes(total - reserved)}")
                 
                 # 警告

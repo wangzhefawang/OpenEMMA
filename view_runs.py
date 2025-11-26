@@ -63,19 +63,20 @@ def format_runtime(seconds: float) -> str:
     minutes = int((seconds % 3600) // 60)
     secs = int(seconds % 60)
     if hours > 0:
-        return f"{hours}h {minutes}m {secs}s"
+        return f"{hours}小时 {minutes}分钟 {secs}秒"
     elif minutes > 0:
-        return f"{minutes}m {secs}s"
+        return f"{minutes}分钟 {secs}秒"
     else:
-        return f"{secs}s"
+        return f"{secs}秒"
 
 
 def format_memory(mb: float) -> str:
     """格式化显存"""
     if mb is None:
         return "N/A"
-    if mb > 1024:
-        return f"{mb/1024:.2f} GB"
+    if mb >= 1024:
+        gb = mb / 1024
+        return f"{gb:.2f} GB"
     else:
         return f"{mb:.2f} MB"
 

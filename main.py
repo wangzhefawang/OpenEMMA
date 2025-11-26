@@ -322,14 +322,44 @@ def main():
     metrics = monitor.finish()
     metrics_path = os.path.join(timestamp, "runtime_metrics.json")
     monitor.dump(metrics_path)
+    
+    # 格式化输出
+    print("\n" + "=" * 60)
+    print("运行统计")
+    print("=" * 60)
+    
     if metrics["total_runtime_sec"] is not None:
-        print(f"总运行时长: {metrics['total_runtime_sec']:.2f} 秒")
+        runtime_sec = metrics["total_runtime_sec"]
+        hours = int(runtime_sec // 3600)
+        minutes = int((runtime_sec % 3600) // 60)
+        seconds = int(runtime_sec % 60)
+        
+        if hours > 0:
+            print(f"总运行时长: {hours}小时 {minutes}分钟 {seconds}秒 ({runtime_sec:.2f}秒)")
+        elif minutes > 0:
+            print(f"总运行时长: {minutes}分钟 {seconds}秒 ({runtime_sec:.2f}秒)")
+        else:
+            print(f"总运行时长: {seconds}秒 ({runtime_sec:.2f}秒)")
     else:
-        print("未能计算运行时长。")
+        print("总运行时长: 未能计算")
+    
     if metrics["avg_gpu_memory_mb"] is not None:
-        print(f"GPU显存平均使用: {metrics['avg_gpu_memory_mb']:.2f} MB")
+        gpu_mb = metrics["avg_gpu_memory_mb"]
+        if gpu_mb >= 1024:
+            gpu_gb = gpu_mb / 1024
+            print(f"GPU显存平均使用: {gpu_gb:.2f} GB ({gpu_mb:.2f} MB)")
+        else:
+            print(f"GPU显存平均使用: {gpu_mb:.2f} MB")
+        
+        # 显示采样次数
+        if "gpu_samples_count" in metrics:
+            print(f"显存采样次数: {metrics['gpu_samples_count']}")
     else:
-        print("GPU 不可用，未统计显存平均值。")
+        print("GPU显存平均使用: GPU不可用")
+    
+    print(f"\n结果已保存到: {timestamp}")
+    print(f"指标文件: {metrics_path}")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
