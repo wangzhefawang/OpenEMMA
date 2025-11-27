@@ -14,7 +14,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model-path",
         type=str,
-        default=r"D:\SAVE\files\Models\Llama-3.2-11B-Vision-Instruct",
+        default=r"D:\SAVE\files\Models\Qwen2.5-VL-7B-Instruct",
         help="VLM 模型路径或 HuggingFace 仓库名",
     )
     parser.add_argument(
@@ -26,7 +26,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--dataroot",
         type=str,
-        default=r"D:\SAVE\files\Datasets\nuscenes-v1.0-mini",
+        default=r"D:\SAVE\files\Datasets\nuscenes-v1.0",
         help="NuScenes 数据集根目录",
     )
     parser.add_argument(
@@ -44,7 +44,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--quantization",
         type=str,
-        default="8bit",  # 与原始 main-251126.py 保持一致
+        default="none",  # 与原始 main-251126.py 保持一致
         choices=["none", "4bit", "8bit"],
         help="选择 VLM 加载精度：none/4bit/8bit",
     )
@@ -53,6 +53,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=str,
         default="",
         help="逗号分隔的 scene 列表，如 scene-0103,scene-1077; 留空则跑全部",
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        default="val",
+        choices=["", "train", "val", "trainval", "mini_train", "mini_val", "test", "train_detect", "train_track"],
+        help="NuScenes 官方 split：train(700场景)/val(150场景)/trainval(850场景)/test(150场景) 等; 留空则跑全部",
     )
     
     return parser

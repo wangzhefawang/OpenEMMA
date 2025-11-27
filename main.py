@@ -12,7 +12,7 @@ import torch
 
 from config import OBS_LEN, FUT_LEN, TTL_LEN, build_arg_parser
 from models import load_vlm, prepare_image_payload
-from data_utils import load_nuscenes_dataset, parse_scene_filter, load_scene_data
+from data_utils import load_nuscenes_dataset, parse_scene_filter, load_scene_data, get_split_scenes
 from eval import GenerateMotion
 from viz import (
     plot_trajectory_interpolation,
@@ -81,9 +81,36 @@ def main():
 
     # 解析场景过滤器
     scenes = nusc.scene
+    
+    # 获取 split 场景列表（如果指定）
+    split_scene_names = get_split_scenes(args.split)
+    
+    # 获取手动指定的场景列表（如果有）
     allowed_scene_identifiers = parse_scene_filter(args.scenes, scenes)
 
-    print(f"Number of scenes: {len(scenes)}")
+    print(f"Number of scenes in dataset: {len(scenes)}")
+    
+    # 统计将要处理的场景数
+    scenes_to_process = 0
+    for scene in scenes:
+        name = scene["name"]
+        token = scene["token"]
+        
+        # 应用 split 过滤
+        if split_scene_names and name not in split_scene_names:
+            continue
+            
+        # 应用手动场景过滤
+        if (
+            allowed_scene_identifiers
+            and name not in allowed_scene_identifiers
+            and token not in allowed_scene_identifiers
+        ):
+            continue
+            
+        scenes_to_process += 1
+    
+    print(f"Number of scenes to process: {scenes_to_process}")
 
     # 遍历场景
     for scene in scenes:
@@ -91,7 +118,11 @@ def main():
         name = scene["name"]
         description = scene["description"]
 
-        # 场景过滤
+        # 应用 split 过滤
+        if split_scene_names and name not in split_scene_names:
+            continue
+
+        # 应用手动场景过滤
         if (
             allowed_scene_identifiers
             and name not in allowed_scene_identifiers

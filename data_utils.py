@@ -4,11 +4,51 @@ import os
 import re
 from typing import List, Set, Tuple
 from nuscenes import NuScenes
+from nuscenes.utils.splits import create_splits_scenes
 
 
 def load_nuscenes_dataset(version: str, dataroot: str):
     """加载 NuScenes 数据集"""
     return NuScenes(version=version, dataroot=dataroot)
+
+
+def get_split_scenes(split: str) -> Set[str]:
+    """
+    获取 NuScenes 官方 split 的场景名称集合
+    
+    Args:
+        split: split 名称（train/val/trainval/test/mini_train/mini_val 等）
+        
+    Returns:
+        该 split 包含的场景名称集合
+    """
+    if not split:
+        return set()
+    
+    try:
+        splits = create_splits_scenes()
+        
+        # 处理 trainval 特殊情况（train + val）
+        if split == "trainval":
+            if "train" in splits and "val" in splits:
+                scene_names = set(splits["train"]) | set(splits["val"])
+                print(f"已加载 NuScenes '{split}' split: {len(scene_names)} 个场景 (train={len(splits['train'])} + val={len(splits['val'])})")
+            else:
+                print(f"警告：无法找到 train 或 val split，将处理所有场景")
+                return set()
+        elif split in splits:
+            scene_names = set(splits[split])
+            print(f"已加载 NuScenes '{split}' split: {len(scene_names)} 个场景")
+        else:
+            available_splits = ", ".join(splits.keys())
+            print(f"警告：未知的 split '{split}'，可用的 split: {available_splits}")
+            return set()
+            
+        return scene_names
+        
+    except Exception as e:
+        print(f"警告：加载 split 信息失败: {e}")
+        return set()
 
 
 def parse_scene_filter(scenes_arg: str, all_scenes: list) -> Set[str]:
