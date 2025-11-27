@@ -32,7 +32,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         type=str,
-        default="v1.0-mini",
+        default="v1.0-trainval",
         help="NuScenes 数据集版本",
     )
     parser.add_argument(
