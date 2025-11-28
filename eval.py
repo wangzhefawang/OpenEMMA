@@ -125,11 +125,11 @@ def GenerateMotion(
         The identified critical objects are {object_description}. 
         The car's intent is {intent_description}. 
         The 5 second historical velocities and curvatures of the ego car are {obs_speed_curvature_str}. 
-        Infer the association between these numbers and the image sequence. Generate the predicted future speeds and curvatures in the format [speed_1, curvature_1], [speed_2, curvature_2],..., [speed_10, curvature_10]. Write the raw text not markdown or latex. Future speeds and curvatures:"""
+        Based on the historical data and scene context, predict the NEXT 10 future timesteps (5 seconds ahead). Only output the future predictions, do not repeat the historical data. Generate the predicted future speeds and curvatures in the format [speed_1, curvature_1], [speed_2, curvature_2],..., [speed_10, curvature_10]. Write the raw text not markdown or latex. Future speeds and curvatures:"""
     else:
         prompt = f"""These are frames from a video taken by a camera mounted in the front of a car. The images are taken at a 0.5 second interval. 
         The 5 second historical velocities and curvatures of the ego car are {obs_speed_curvature_str}. 
-        Infer the association between these numbers and the image sequence. Generate the predicted future speeds and curvatures in the format [speed_1, curvature_1], [speed_2, curvature_2],..., [speed_10, curvature_10]. Write the raw text not markdown or latex. Future speeds and curvatures:"""
+        Based on the historical data, predict the NEXT 10 future timesteps (5 seconds ahead). Only output the future predictions, do not repeat the historical data. Generate the predicted future speeds and curvatures in the format [speed_1, curvature_1], [speed_2, curvature_2],..., [speed_10, curvature_10]. Write the raw text not markdown or latex. Future speeds and curvatures:"""
     for rho in range(3):
         result = vlm_inference(
             text=prompt,

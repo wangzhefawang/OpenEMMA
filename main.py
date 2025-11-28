@@ -255,10 +255,48 @@ def main():
 
                 # 解析输出
                 prev_intent = updated_intent
-                pred_waypoints = prediction.replace("Future speeds and curvatures:", "").strip()
+                
+                # 调试：打印原始预测结果
+                print(f"\n{'='*60}")
+                print(f"原始 VLM 输出：")
+                print(f"{prediction}")
+                print(f"{'='*60}\n")
+                
+                # 智能解析：避免提取 prompt 中的观测数据
+                pred_text = prediction.lower()  # 转小写进行匹配
+                
+                # 策略1：找到最后一次出现的 "future speeds and curvatures:" 标记
+                # （因为 prompt 和 response 都可能包含这个短语）
+                last_marker_pos = pred_text.rfind("future speeds and curvatures:")
+                
+                if last_marker_pos != -1:
+                    # 从最后一个标记之后开始提取
+                    pred_waypoints = prediction[last_marker_pos + len("future speeds and curvatures:"):]
+                else:
+                    # 策略2：尝试找到观测数据序列结束的位置
+                    # 观测数据在 prompt 中的模式: "are [0.000,0.000], ..."
+                    obs_marker_pos = pred_text.rfind("historical velocities and curvatures")
+                    
+                    if obs_marker_pos != -1:
+                        # 跳过观测数据部分，寻找下一个句子的开始
+                        pred_waypoints = prediction[obs_marker_pos:]
+                        # 尝试移除到第一个完整句子
+                        if "." in pred_waypoints:
+                            # 跳过包含观测数据的句子
+                            parts = pred_waypoints.split(".", 1)
+                            if len(parts) > 1:
+                                pred_waypoints = parts[1]
+                    else:
+                        # 策略3：如果都找不到，使用整个输出（向后兼容）
+                        pred_waypoints = prediction
+                
+                # 提取所有数字对
                 coordinates = re.findall(
                     r"\[([-+]?\d*\.?\d+),\s*([-+]?\d*\.?\d+)\]", pred_waypoints
                 )
+                
+                print(f"[INFO] 从 VLM 输出中提取到 {len(coordinates)} 个坐标")
+                
                 if not coordinates == []:
                     break
 

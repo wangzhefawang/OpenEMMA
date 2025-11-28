@@ -240,7 +240,13 @@ def vlm_inference(
             ).to(model.device)
 
             max_tokens = getattr(args, 'max_new_tokens', 2048) if args else 2048
-            output = model.generate(**inputs, max_new_tokens=max_tokens)
+            output = model.generate(
+                **inputs, 
+                max_new_tokens=max_tokens,
+                do_sample=True,
+                temperature=0.7,
+                top_p=0.9,
+            )
 
             output_text = processor.decode(output[0])
             
@@ -303,7 +309,13 @@ def vlm_inference(
                 )
                 inputs = inputs.to(model.device)
                 max_tokens = getattr(args, 'max_new_tokens', 512)
-                generated_ids = model.generate(**inputs, max_new_tokens=max_tokens)
+                generated_ids = model.generate(
+                    **inputs, 
+                    max_new_tokens=max_tokens,
+                    do_sample=True,
+                    temperature=0.7,
+                    top_p=0.9,
+                )
                 generated_ids_trimmed = [
                     out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
                 ]
@@ -326,7 +338,13 @@ def vlm_inference(
                     return_tensors="pt",
                 ).to(model.device)
                 max_tokens = getattr(args, 'max_new_tokens', 512)
-                generated_ids = model.generate(**inputs, max_new_tokens=max_tokens)
+                generated_ids = model.generate(
+                    **inputs, 
+                    max_new_tokens=max_tokens,
+                    do_sample=True,
+                    temperature=0.7,
+                    top_p=0.9,
+                )
                 generated_ids_trimmed = [
                     out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
                 ]
