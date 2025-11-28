@@ -61,6 +61,24 @@ def build_arg_parser() -> argparse.ArgumentParser:
         choices=["", "train", "val", "trainval", "mini_train", "mini_val", "test", "train_detect", "train_track"],
         help="NuScenes 官方 split：train(700场景)/val(150场景)/trainval(850场景)/test(150场景) 等; 留空则跑全部",
     )
+    parser.add_argument(
+        "--use-cuda-graphs",
+        action="store_true",
+        default=False,
+        help="启用 CUDA Graphs 优化以减少 Python 调度开销（预期速度提升 10-40%%）",
+    )
+    parser.add_argument(
+        "--cuda-graphs-warmup",
+        type=int,
+        default=3,
+        help="CUDA Graphs 预热次数（默认 3 次）",
+    )
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=512,
+        help="VLM 生成的最大 token 数（默认 512，避免输出截断）",
+    )
     
     return parser
 

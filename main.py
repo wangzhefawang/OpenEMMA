@@ -11,7 +11,7 @@ import numpy as np
 import torch
 
 from config import OBS_LEN, FUT_LEN, TTL_LEN, build_arg_parser
-from models import load_vlm, prepare_image_payload
+from models import load_vlm, prepare_image_payload, get_cuda_graphs_wrapper
 from data_utils import load_nuscenes_dataset, parse_scene_filter, load_scene_data, get_split_scenes
 from eval import GenerateMotion
 from viz import (
@@ -47,12 +47,19 @@ def main():
     tokenizer = None
     try:
         model, tokenizer, processor = load_vlm(
-            args.model_path, quantization=args.quantization
+            args.model_path, 
+            quantization=args.quantization,
+            use_cuda_graphs=args.use_cuda_graphs,
+            warmup_iterations=args.cuda_graphs_warmup
         )
         assert (
             tokenizer is not None and model is not None
         ), "模型/分词器加载失败，请检查 --model-path"
         print(f"已从 {args.model_path} 加载模型。")
+        
+        if args.use_cuda_graphs:
+            print(f"✨ CUDA Graphs 优化已启用（预热次数: {args.cuda_graphs_warmup}）")
+        
         monitor.record_gpu_usage()
     except Exception as e:
         print("模型加载出现异常：", e)
@@ -353,6 +360,17 @@ def main():
     metrics = monitor.finish()
     metrics_path = os.path.join(timestamp, "runtime_metrics.json")
     monitor.dump(metrics_path)
+    
+    # 输出 CUDA Graphs 统计（如果启用）
+    if args.use_cuda_graphs:
+        cuda_wrapper = get_cuda_graphs_wrapper()
+        if cuda_wrapper is not None:
+            cuda_wrapper.print_statistics()
+            
+            # 将统计信息添加到 metrics
+            cuda_stats = cuda_wrapper.get_statistics()
+            metrics["cuda_graphs"] = cuda_stats
+            monitor.dump(metrics_path)  # 重新保存包含 CUDA Graphs 统计的指标
     
     # 格式化输出
     print("\n" + "=" * 60)

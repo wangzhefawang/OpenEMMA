@@ -21,19 +21,58 @@ from llava.utils import disable_torch_init
 from llava.mm_utils import tokenizer_image_token, process_images, get_model_name_from_path
 from llava.conversation import conv_templates
 from openai import OpenAI
+from cuda_graphs_wrapper import CUDAGraphsWrapper
 
 client = OpenAI(api_key="[your-openai-api-key]")
 
+# 全局 CUDA Graphs 包装器实例
+_cuda_graphs_wrapper = None
 
-def load_vlm(repo_or_path, quantization: str = "none"):
+
+def initialize_cuda_graphs(use_cuda_graphs: bool = False, warmup_iterations: int = 3):
+    """
+    初始化全局 CUDA Graphs 包装器
+    
+    Args:
+        use_cuda_graphs: 是否启用 CUDA Graphs
+        warmup_iterations: 预热迭代次数
+    """
+    global _cuda_graphs_wrapper
+    
+    if _cuda_graphs_wrapper is None and use_cuda_graphs:
+        _cuda_graphs_wrapper = CUDAGraphsWrapper(
+            max_graphs=10,
+            warmup_iterations=warmup_iterations,
+            enabled=use_cuda_graphs and torch.cuda.is_available()
+        )
+    
+    return _cuda_graphs_wrapper
+
+
+def get_cuda_graphs_wrapper():
+    """获取全局 CUDA Graphs 包装器"""
+    return _cuda_graphs_wrapper
+
+
+def load_vlm(repo_or_path, quantization: str = "none", use_cuda_graphs: bool = False, warmup_iterations: int = 3):
     """
     根据 --model-path 加载对应的视觉语言模型。
     - 对于 LLaVA 系列，走其自带的加载逻辑（需要 tokenizer / image_processor）。
     - 其他 Hugging Face Vision-LLM 走 AutoModelForVision2Seq + AutoProcessor。
+    
+    Args:
+        repo_or_path: 模型路径或仓库名
+        quantization: 量化方式 (none/4bit/8bit)
+        use_cuda_graphs: 是否启用 CUDA Graphs 优化
+        warmup_iterations: CUDA Graphs 预热迭代次数
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
     repo_lower = repo_or_path.lower()
     quantization = (quantization or "none").lower()
+    
+    # 初始化 CUDA Graphs 包装器
+    if use_cuda_graphs:
+        initialize_cuda_graphs(use_cuda_graphs, warmup_iterations)
 
     if "llava" in repo_lower:
         disable_torch_init()
@@ -165,8 +204,27 @@ def vlm_inference(
     model=None,
     tokenizer=None,
     args=None,
+    use_cuda_graphs=False,
 ):
-    """统一的 VLM 推理接口"""
+    """
+    统一的 VLM 推理接口
+    
+    Args:
+        text: 输入文本
+        images: 输入图像
+        sys_message: 系统消息
+        processor: 处理器
+        model: 模型
+        tokenizer: 分词器
+        args: 命令行参数
+        use_cuda_graphs: 是否使用 CUDA Graphs（实验性功能）
+    
+    Note:
+        CUDA Graphs 对于具有动态输出长度的生成任务支持有限。
+        当前主要优化输入处理和编码阶段。
+    """
+    cuda_wrapper = get_cuda_graphs_wrapper() if use_cuda_graphs else None
+    
     with torch.inference_mode():
         if "llama" in args.model_path or "Llama" in args.model_path:
             if isinstance(images, dict) and "pil" in images:
@@ -181,7 +239,8 @@ def vlm_inference(
                 image, input_text, add_special_tokens=False, return_tensors="pt"
             ).to(model.device)
 
-            output = model.generate(**inputs, max_new_tokens=2048)
+            max_tokens = getattr(args, 'max_new_tokens', 2048) if args else 2048
+            output = model.generate(**inputs, max_new_tokens=max_tokens)
 
             output_text = processor.decode(output[0])
             
@@ -243,7 +302,8 @@ def vlm_inference(
                     return_tensors="pt",
                 )
                 inputs = inputs.to(model.device)
-                generated_ids = model.generate(**inputs, max_new_tokens=128)
+                max_tokens = getattr(args, 'max_new_tokens', 512)
+                generated_ids = model.generate(**inputs, max_new_tokens=max_tokens)
                 generated_ids_trimmed = [
                     out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
                 ]
@@ -265,7 +325,8 @@ def vlm_inference(
                     padding=True,
                     return_tensors="pt",
                 ).to(model.device)
-                generated_ids = model.generate(**inputs, max_new_tokens=128)
+                max_tokens = getattr(args, 'max_new_tokens', 512)
+                generated_ids = model.generate(**inputs, max_new_tokens=max_tokens)
                 generated_ids_trimmed = [
                     out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
                 ]
@@ -316,6 +377,7 @@ def vlm_inference(
 
             image_tensor = image_tensor.unsqueeze(0).to(model.device, dtype=torch.float16)
 
+            max_tokens = getattr(args, 'max_new_tokens', 2048) if args else 2048
             output_ids = model.generate(
                 input_ids,
                 images=image_tensor,
@@ -324,7 +386,7 @@ def vlm_inference(
                 temperature=0.2,
                 top_p=None,
                 num_beams=1,
-                max_new_tokens=2048,
+                max_new_tokens=max_tokens,
                 use_cache=True,
                 pad_token_id=tokenizer.eos_token_id,
             )
@@ -351,10 +413,11 @@ def vlm_inference(
             if sys_message is not None:
                 sys_message_dict = {"role": "system", "content": sys_message}
                 PROMPT_MESSAGES.append(sys_message_dict)
+            max_tokens = getattr(args, 'max_new_tokens', 800) if args else 800
             params = {
                 "model": "gpt-4o-2024-11-20",
                 "messages": PROMPT_MESSAGES,
-                "max_tokens": 400,
+                "max_tokens": max_tokens,
             }
 
             result = client.chat.completions.create(**params)

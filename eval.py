@@ -3,7 +3,7 @@ import numpy as np
 from models import vlm_inference
 
 
-def SceneDescription(obs_images, processor=None, model=None, tokenizer=None, args=None):
+def SceneDescription(obs_images, processor=None, model=None, tokenizer=None, args=None, use_cuda_graphs=False):
     """生成场景描述"""
     prompt = """You are a autonomous driving labeller. You have access to these front-view camera images of a car taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. Describe the driving scene according to traffic lights, movements of other cars or pedestrians and lane markings."""
 
@@ -17,11 +17,12 @@ def SceneDescription(obs_images, processor=None, model=None, tokenizer=None, arg
         model=model,
         tokenizer=tokenizer,
         args=args,
+        use_cuda_graphs=use_cuda_graphs,
     )
     return result
 
 
-def DescribeObjects(obs_images, processor=None, model=None, tokenizer=None, args=None):
+def DescribeObjects(obs_images, processor=None, model=None, tokenizer=None, args=None, use_cuda_graphs=False):
     """描述关键对象"""
     prompt = """You are a autonomous driving labeller. You have access to a front-view camera images of a vehicle taken at a 0.5 second interval over the past 5 seconds. Imagine you are driving the car. What other road users should you pay attention to in the driving scene? List two or three of them, specifying its location within the image of the driving scene and provide a short description of the that road user on what it is doing, and why it is important to you."""
 
@@ -32,13 +33,14 @@ def DescribeObjects(obs_images, processor=None, model=None, tokenizer=None, args
         model=model,
         tokenizer=tokenizer,
         args=args,
+        use_cuda_graphs=use_cuda_graphs,
     )
 
     return result
 
 
 def DescribeOrUpdateIntent(
-    obs_images, prev_intent=None, processor=None, model=None, tokenizer=None, args=None
+    obs_images, prev_intent=None, processor=None, model=None, tokenizer=None, args=None, use_cuda_graphs=False
 ):
     """描述或更新意图"""
     if prev_intent is None:
@@ -60,6 +62,7 @@ def DescribeOrUpdateIntent(
         model=model,
         tokenizer=tokenizer,
         args=args,
+        use_cuda_graphs=use_cuda_graphs,
     )
 
     return result
@@ -81,12 +84,14 @@ def GenerateMotion(
     
     scene_description, object_description, intent_description = None, None, None
 
+    use_cuda_graphs = getattr(args, 'use_cuda_graphs', False)
+    
     if args.method == "openemma":
         scene_description = SceneDescription(
-            obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args
+            obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, use_cuda_graphs=use_cuda_graphs
         )
         object_description = DescribeObjects(
-            obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args
+            obs_images, processor=processor, model=model, tokenizer=tokenizer, args=args, use_cuda_graphs=use_cuda_graphs
         )
         intent_description = DescribeOrUpdateIntent(
             obs_images,
@@ -95,6 +100,7 @@ def GenerateMotion(
             model=model,
             tokenizer=tokenizer,
             args=args,
+            use_cuda_graphs=use_cuda_graphs,
         )
         print(f"\n\nScene Description: {scene_description}")
         print(f"\n\nObject Description: {object_description}")
@@ -133,6 +139,7 @@ def GenerateMotion(
             model=model,
             tokenizer=tokenizer,
             args=args,
+            use_cuda_graphs=use_cuda_graphs,
         )
         if not "unable" in result and not "sorry" in result and "[" in result:
             break
