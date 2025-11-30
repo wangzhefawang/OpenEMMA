@@ -52,7 +52,7 @@ def save_frame_results(
     np.save(f"{timestamp}/{scene_name}_{frame_idx}_pred_speeds.npy", pred_speeds)
 
     # Save the descriptions
-    with open(f"{timestamp}/{scene_name}_{frame_idx}_logs.txt", "w") as f:
+    with open(f"{timestamp}/{scene_name}_{frame_idx}_logs.txt", "w", encoding='utf-8') as f:
         f.write(f"Scene Description: {scene_description}\n")
         f.write(f"Object Description: {object_description}\n")
         f.write(f"Intent Description: {updated_intent}\n")
@@ -72,7 +72,7 @@ def save_scene_metrics(timestamp, scene_name, token, mean_ade1s, mean_ade2s, mea
         "avgade": aveg_ade,
     }
 
-    with open(f"{timestamp}/ade_results.jsonl", "a") as f:
+    with open(f"{timestamp}/ade_results.jsonl", "a", encoding='utf-8') as f:
         f.write(json.dumps(result))
         f.write("\n")
 
