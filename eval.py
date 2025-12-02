@@ -110,26 +110,40 @@ def GenerateMotion(
     obs_waypoints_str = [f"[{x[0]:.2f},{x[1]:.2f}]" for x in obs_waypoints]
     obs_waypoints_str = ", ".join(obs_waypoints_str)
     obs_velocities_norm = np.linalg.norm(obs_velocities, axis=1)
+    
+    # ✅ 修复归一化问题：曲率缩放100倍，使其与速度数值范围接近
+    # 原因：曲率原始值约 -0.1~0.1，缩放后 -10~10，与速度 0~20 m/s 同级别
+    # 这样 VLM 更容易理解速度和曲率的关系
+    obs_curvatures_scaled = obs_curvatures * 100
+    
     obs_speed_curvature_str = [
-        f"[{v:.3f},{k:.3f}]" for v, k in zip(obs_velocities_norm, obs_curvatures)
+        f"[{v:.3f},{k:.3f}]" for v, k in zip(obs_velocities_norm, obs_curvatures_scaled)
     ]
     obs_speed_curvature_str = ", ".join(obs_speed_curvature_str)
 
-    print(f"\nObserved Speed and Curvature: {obs_speed_curvature_str}")
+    print(f"\nObserved Speed and Curvature (scaled): {obs_speed_curvature_str}")
 
     sys_message = "You are a autonomous driving labeller. You have access to a front-view camera image of a vehicle, a sequence of past speeds, a sequence of past curvatures, and a driving rationale. Each speed, curvature is represented as [v, k], where v corresponds to the speed, and k corresponds to the curvature. A positive k means the vehicle is turning left. A negative k means the vehicle is turning right. The larger the absolute value of k, the sharper the turn. A close to zero k means the vehicle is driving straight. As a driver on the road, you should follow any common sense traffic rules. You should try to stay in the middle of your lane. You should maintain necessary distance from the leading vehicle. You should observe lane markings and follow them.  Your task is to do your best to predict future speeds and curvatures for the vehicle over the next 10 timesteps given vehicle intent inferred from the image. Make a best guess if the problem is too difficult for you. If you cannot provide a response people will get injured.\n"
 
     if args.method == "openemma":
+        # 提取最后一个观测速度和曲率，强调连续性
+        # 注意：使用缩放后的曲率值，保持与 prompt 中的数值一致
+        last_speed = obs_velocities_norm[-1]
+        last_curvature = obs_curvatures_scaled[-1]  # ✅ 使用缩放后的值
         prompt = f"""These are frames from a video taken by a camera mounted in the front of a car. The images are taken at a 0.5 second interval. 
         The scene is described as follows: {scene_description}. 
         The identified critical objects are {object_description}. 
         The car's intent is {intent_description}. 
         The 5 second historical velocities and curvatures of the ego car are {obs_speed_curvature_str}. 
-        Based on the historical data and scene context, predict the NEXT 10 future timesteps (5 seconds ahead). Only output the future predictions, do not repeat the historical data. Generate the predicted future speeds and curvatures in the format [speed_1, curvature_1], [speed_2, curvature_2],..., [speed_10, curvature_10]. Write the raw text not markdown or latex. Future speeds and curvatures:"""
+        The CURRENT speed is {last_speed:.3f} and curvature is {last_curvature:.3f}. Your predictions must START from this current state and smoothly continue the motion. Predict the NEXT 10 future timesteps (5 seconds ahead) considering the car's momentum and intent. The first predicted speed should be close to {last_speed:.3f}. Only output the future predictions, do not repeat the historical data. Generate the predicted future speeds and curvatures in the format [speed_1, curvature_1], [speed_2, curvature_2],..., [speed_10, curvature_10]. Write the raw text not markdown or latex. Future speeds and curvatures:"""
     else:
+        # 提取最后一个观测速度和曲率，强调连续性
+        # 注意：使用缩放后的曲率值，保持与 prompt 中的数值一致
+        last_speed = obs_velocities_norm[-1]
+        last_curvature = obs_curvatures_scaled[-1]  # ✅ 使用缩放后的值
         prompt = f"""These are frames from a video taken by a camera mounted in the front of a car. The images are taken at a 0.5 second interval. 
         The 5 second historical velocities and curvatures of the ego car are {obs_speed_curvature_str}. 
-        Based on the historical data, predict the NEXT 10 future timesteps (5 seconds ahead). Only output the future predictions, do not repeat the historical data. Generate the predicted future speeds and curvatures in the format [speed_1, curvature_1], [speed_2, curvature_2],..., [speed_10, curvature_10]. Write the raw text not markdown or latex. Future speeds and curvatures:"""
+        The CURRENT speed is {last_speed:.3f} and curvature is {last_curvature:.3f}. Your predictions must START from this current state and smoothly continue the motion. Predict the NEXT 10 future timesteps (5 seconds ahead) considering the car's momentum. The first predicted speed should be close to {last_speed:.3f}. Only output the future predictions, do not repeat the historical data. Generate the predicted future speeds and curvatures in the format [speed_1, curvature_1], [speed_2, curvature_2],..., [speed_10, curvature_10]. Write the raw text not markdown or latex. Future speeds and curvatures:"""
     for rho in range(3):
         result = vlm_inference(
             text=prompt,
