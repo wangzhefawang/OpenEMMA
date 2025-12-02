@@ -305,7 +305,9 @@ def main():
 
             speed_curvature_pred = [[float(v), float(k)] for v, k in coordinates]
             speed_curvature_pred = speed_curvature_pred[:10]
-            print(f"Got {len(speed_curvature_pred)} future actions: {speed_curvature_pred}")
+            # 格式化输出，与 Observed 格式一致
+            pred_str = ", ".join([f"[{v:.3f},{k:.3f}]" for v, k in speed_curvature_pred])
+            print(f"Got {len(speed_curvature_pred)} future actions: {pred_str}")
 
             # 预测轨迹
             pred_len = min(FUT_LEN, len(speed_curvature_pred))

@@ -239,7 +239,7 @@ def vlm_inference(
                 image, input_text, add_special_tokens=False, return_tensors="pt"
             ).to(model.device)
 
-            max_tokens = getattr(args, 'max_new_tokens', 2048) if args else 2048
+            max_tokens = getattr(args, 'max_new_tokens', None) or 2048  # Llama 默认 2048
             output = model.generate(
                 **inputs, 
                 max_new_tokens=max_tokens,
@@ -308,7 +308,7 @@ def vlm_inference(
                     return_tensors="pt",
                 )
                 inputs = inputs.to(model.device)
-                max_tokens = getattr(args, 'max_new_tokens', 512)
+                max_tokens = getattr(args, 'max_new_tokens', None) or 512  # Qwen2.5-VL 默认 512
                 generated_ids = model.generate(
                     **inputs, 
                     max_new_tokens=max_tokens,
@@ -337,7 +337,7 @@ def vlm_inference(
                     padding=True,
                     return_tensors="pt",
                 ).to(model.device)
-                max_tokens = getattr(args, 'max_new_tokens', 512)
+                max_tokens = getattr(args, 'max_new_tokens', None) or 512  # Qwen2-VL 默认 512
                 generated_ids = model.generate(
                     **inputs, 
                     max_new_tokens=max_tokens,
@@ -395,7 +395,7 @@ def vlm_inference(
 
             image_tensor = image_tensor.unsqueeze(0).to(model.device, dtype=torch.float16)
 
-            max_tokens = getattr(args, 'max_new_tokens', 2048) if args else 2048
+            max_tokens = getattr(args, 'max_new_tokens', None) or 2048  # LLaVA 默认 2048
             output_ids = model.generate(
                 input_ids,
                 images=image_tensor,
@@ -431,7 +431,7 @@ def vlm_inference(
             if sys_message is not None:
                 sys_message_dict = {"role": "system", "content": sys_message}
                 PROMPT_MESSAGES.append(sys_message_dict)
-            max_tokens = getattr(args, 'max_new_tokens', 800) if args else 800
+            max_tokens = getattr(args, 'max_new_tokens', None) or 800  # GPT 默认 800
             params = {
                 "model": "gpt-4o-2024-11-20",
                 "messages": PROMPT_MESSAGES,

@@ -76,8 +76,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--max-new-tokens",
         type=int,
-        default=512,
-        help="VLM 生成的最大 token 数（默认 512，避免输出截断）",
+        default=None,  # None 表示使用各模型的代码默认值
+        help="VLM 生成的最大 token 数（不设置则使用模型默认值：Llama/LLaVA=2048, Qwen=512, GPT=800）",
     )
     
     return parser
