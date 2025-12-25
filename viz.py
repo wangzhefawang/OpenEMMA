@@ -59,9 +59,22 @@ def save_frame_results(
         f.write(f"Average Displacement Error: {ade}\n")
 
 
-def save_scene_metrics(timestamp, scene_name, token, mean_ade1s, mean_ade2s, mean_ade3s):
-    """保存场景级别的评估指标"""
-    aveg_ade = np.mean([mean_ade1s, mean_ade2s, mean_ade3s])
+def save_scene_metrics(
+    timestamp,
+    scene_name,
+    token,
+    mean_ade1s,
+    mean_ade2s,
+    mean_ade3s,
+    mean_error_1s,
+    failure_rate_1s_frame,
+    failure_flag_1s_scene,
+):
+    """保存场景级别的评估指标，包括 1 秒 Failure 相关指标"""
+    if None not in (mean_ade1s, mean_ade2s, mean_ade3s):
+        aveg_ade = float(np.mean([mean_ade1s, mean_ade2s, mean_ade3s]))
+    else:
+        aveg_ade = None
 
     result = {
         "name": scene_name,
@@ -70,6 +83,9 @@ def save_scene_metrics(timestamp, scene_name, token, mean_ade1s, mean_ade2s, mea
         "ade2s": mean_ade2s,
         "ade3s": mean_ade3s,
         "avgade": aveg_ade,
+        "error_1s": mean_error_1s,
+        "failure_rate_1s_frame": failure_rate_1s_frame,
+        "failure_1s_scene": failure_flag_1s_scene,
     }
 
     with open(f"{timestamp}/ade_results.jsonl", "a", encoding='utf-8') as f:

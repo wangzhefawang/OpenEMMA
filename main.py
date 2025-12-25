@@ -30,6 +30,10 @@ from runtime_monitor import RuntimeMonitor
 from openemma.YOLO3D.inference import yolo3d_nuScenes
 
 
+FAILURE_THRESHOLD_1S = 10.0  # 1 秒位置误差阈值（单位：米）
+ONE_SECOND_INDEX = 1  # 在 dt≈0.5s 的设置下，1s 对应的 future step 下标（0-based）
+
+
 def main():
     # 解析参数
     parser = build_arg_parser()
@@ -187,6 +191,7 @@ def main():
         ade1s_list = []
         ade2s_list = []
         ade3s_list = []
+        error_1s_list = []  # 每一帧在 1 秒处的 L2 误差
 
         for i in range(scene_length - TTL_LEN):
             # 获取观测和未来数据
@@ -356,6 +361,13 @@ def main():
             )
             ade3s_list.append(ade3s)
 
+            # 计算 1 秒处的单点 L2 误差（用于 Failure rate）
+            if pred_len > ONE_SECOND_INDEX and fut_ego_traj_world.shape[0] > ONE_SECOND_INDEX:
+                d_1s = np.linalg.norm(
+                    pred_traj[ONE_SECOND_INDEX, :2] - fut_ego_traj_world[ONE_SECOND_INDEX, :2]
+                )
+                error_1s_list.append(float(d_1s))
+
             # 保存结果
             if args.plot == True:
                 cam_images_sequence.append(img.copy())
@@ -386,11 +398,33 @@ def main():
                 )
 
         # 保存场景级别指标
-        mean_ade1s = np.mean(ade1s_list)
-        mean_ade2s = np.mean(ade2s_list)
-        mean_ade3s = np.mean(ade3s_list)
+        mean_ade1s = float(np.mean(ade1s_list)) if ade1s_list else None
+        mean_ade2s = float(np.mean(ade2s_list)) if ade2s_list else None
+        mean_ade3s = float(np.mean(ade3s_list)) if ade3s_list else None
 
-        save_scene_metrics(timestamp, name, token, mean_ade1s, mean_ade2s, mean_ade3s)
+        if error_1s_list:
+            mean_error_1s = float(np.mean(error_1s_list))
+            failure_rate_1s_frame = float((np.array(error_1s_list) > FAILURE_THRESHOLD_1S).mean())
+        else:
+            mean_error_1s = None
+            failure_rate_1s_frame = None
+
+        # 场景级 Failure 标记：场景内 1 秒误差的平均值是否超过阈值
+        failure_flag_1s_scene = (
+            1 if (mean_error_1s is not None and mean_error_1s > FAILURE_THRESHOLD_1S) else 0
+        )
+
+        save_scene_metrics(
+            timestamp,
+            name,
+            token,
+            mean_ade1s,
+            mean_ade2s,
+            mean_ade3s,
+            mean_error_1s,
+            failure_rate_1s_frame,
+            failure_flag_1s_scene,
+        )
 
         # 生成视频
         if args.plot:

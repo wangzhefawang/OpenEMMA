@@ -14,7 +14,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model-path",
         type=str,
-        default=r"D:\SAVE\files\Models\Llama-3.2-11B-Vision-Instruct",
+        default=r"D:\SAVE\files\Models\Qwen2.5-VL-7B-Instruct",
         help="VLM 模型路径或 HuggingFace 仓库名",
     )
     parser.add_argument(
@@ -39,7 +39,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         "--method",
         type=str,
         default="openemma",
-        help="使用的方法（openemma 或其他）",
+        help="使用的方法（openemma 或 baseline）",
     )
     parser.add_argument(
         "--quantization",
@@ -64,7 +64,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--use-cuda-graphs",
         action="store_true",
-        default=False,
+        default=True,
         help="启用 CUDA Graphs 优化以减少 Python 调度开销（预期速度提升 10-40%%）",
     )
     parser.add_argument(
