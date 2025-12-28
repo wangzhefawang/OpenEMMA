@@ -246,6 +246,7 @@ def vlm_inference(
                 do_sample=True,
                 temperature=0.7,
                 top_p=0.9,
+                pad_token_id=tokenizer.pad_token_id if tokenizer.pad_token_id is not None else tokenizer.eos_token_id,
             )
 
             output_text = processor.decode(output[0])
@@ -315,6 +316,7 @@ def vlm_inference(
                     do_sample=True,
                     temperature=0.7,
                     top_p=0.9,
+                    pad_token_id=processor.tokenizer.pad_token_id if hasattr(processor, 'tokenizer') and processor.tokenizer.pad_token_id is not None else processor.tokenizer.eos_token_id if hasattr(processor, 'tokenizer') else None,
                 )
                 generated_ids_trimmed = [
                     out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
@@ -344,6 +346,7 @@ def vlm_inference(
                     do_sample=True,
                     temperature=0.7,
                     top_p=0.9,
+                    pad_token_id=processor.tokenizer.pad_token_id if hasattr(processor, 'tokenizer') and processor.tokenizer.pad_token_id is not None else processor.tokenizer.eos_token_id if hasattr(processor, 'tokenizer') else None,
                 )
                 generated_ids_trimmed = [
                     out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)

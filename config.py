@@ -14,7 +14,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--model-path",
         type=str,
-        default=r"D:\SAVE\files\Models\Qwen2.5-VL-7B-Instruct",
+        default=r"D:\SAVE\files\Models\llava-v1.6-mistral-7b",
         help="VLM 模型路径或 HuggingFace 仓库名",
     )
     parser.add_argument(
